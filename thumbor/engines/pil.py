@@ -278,6 +278,13 @@ class Engine(BaseEngine):
                 )
                 self.image = self.image.quantize(method=quantize_method)
 
+                # quantize() keeps the palette alpha values but does not set
+                # image.info["transparency"]. GIF can only carry a single
+                # transparent palette index, so without this the GIF writer
+                # treats the indexed image as fully opaque and the pixels
+                # that were transparent come back as a solid black box.
+                self._restore_transparency_index()
+
         ext = requested_extension or self.get_default_extension()
 
         if ext in (".heic", ".heif") and not HAVE_HEIF:
@@ -522,6 +529,25 @@ class Engine(BaseEngine):
             )
 
         return has_transparency
+
+    def _restore_transparency_index(self):
+        """
+        After quantization the palette still carries its alpha values, but
+        Pillow does not set image.info["transparency"]. GIF can only encode
+        one transparent palette index, so record the first fully transparent
+        entry there and let the GIF writer keep it.
+        """
+        if "transparency" in self.image.info:
+            return
+
+        palette = self.image.getpalette("RGBA")
+        if not palette:
+            return
+
+        for index in range(len(palette) // 4):
+            if palette[index * 4 + 3] == 0:
+                self.image.info["transparency"] = index
+                return
 
     def avif_enabled(self):
         return HAVE_AVIF
