@@ -298,6 +298,13 @@ class Transformer:
             )
             crop_height = source_height
 
+        # A target ratio far from the source's can round one side of the
+        # crop down to zero. An empty crop then resizes to a picture in
+        # which every pixel is transparent (or fails outright), so keep at
+        # least one pixel on each side.
+        crop_width = max(1, crop_width)
+        crop_height = max(1, crop_height)
+
         crop_left = int(
             round(
                 min(
@@ -387,9 +394,11 @@ class Transformer:
             return
 
         # add 1e-5 to get .5 rounding up in Python3 as it was in Python2
+        # a zero target side means the request left that axis proportional
+        # to nothing; substitute 1 so the comparison cannot divide by zero
         if (
-            source_width / self.target_width * sign
-            >= source_height / self.target_height * sign
+            source_width / (self.target_width or 1) * sign
+            >= source_height / (self.target_height or 1) * sign
         ):
             resize_height = round(
                 source_height * self.target_width / source_width + 1e-5
@@ -416,6 +425,11 @@ class Transformer:
         )
         self.context.request.width = int(max(requested_width, resize_width))
         self.context.request.height = int(max(requested_height, resize_height))
+
+        # An extreme aspect ratio can round one side of the resize down to
+        # zero, which the engine rejects. Keep at least one pixel.
+        resize_width = max(1, resize_width)
+        resize_height = max(1, resize_height)
 
         self.engine.resize(resize_width, resize_height)
 
